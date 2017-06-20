@@ -9,26 +9,32 @@ var WordDefinition = require('../models/word_definition');
 exports.definition = function(req, res) {
 
   var pluralize = req.app.get('pluralize');
-  /*var search_word = pluralize.singular(req.params.word);
-  console.log('Route word: :' +  search_word);*/
-
   var search_word = req.params.word;
 
-   Word.findOne({name: search_word}).populate('word_definitions').exec()
+  /*var search_word = pluralize.singular(req.params.word);
+  console.log('Route word: :' +  search_word);*/
+  
+  // Search word in db
+  Word.findOne({name: search_word}).populate('word_definitions').exec()
    .then(function(word) {
-    if(word) {
+    if(word) { // Found word in database
+
       WordDefinition.find({ _word: word._id }).exec()
       .then(function(word_definitions) {
         var responseObj = { word: word.name };
+
         word_definitions.forEach(function(word_definition){
           responseObj[word_definition.dictionary_type] = word_definition.definition;
         });
+
         console.log('Return from database');
         console.log(JSON.stringify(responseObj, null, 2));
+
         res.json(JSON.stringify(responseObj));
-      })
+      });
+
     }
-    else {
+    else { // Searched word is not in database
 
       Promise.all([oxfordCrawler(req, search_word), longmanCrawler(req, search_word), banglaCrawler(req, search_word)])
       .then(function(dicWordResults) {
@@ -58,11 +64,11 @@ exports.definition = function(req, res) {
 
         
         //console.log('Before saving')
-        return Promise.all([responseObj, word.save()])
+        return Promise.all([responseObj, word.save()]) // save word in database
         //console.log('AFter saving')
 
       })
-      .then(function(result) {
+      .then(function(result) { // save oxford definition in database
         responseObj = result[0];
         word = result[1];
 
@@ -72,10 +78,9 @@ exports.definition = function(req, res) {
           definition: responseObj.oxford
           
         });
-
-        return Promise.all([responseObj, word, oxford.save()]);
+        return Promise.all([responseObj, word, oxford.save()]); 
       })
-      .then(function(result) {
+      .then(function(result) { // save longman definition in database
         responseObj = result[0];
         word = result[1];
 
@@ -84,9 +89,9 @@ exports.definition = function(req, res) {
           dictionary_type: "longman",
           definition: responseObj.longman
         });
-        return Promise.all([responseObj, word, longman.save()]);
+        return Promise.all([responseObj, word, longman.save()]); 
       })
-      .then(function(result) {
+      .then(function(result) { // save bangla definition in database
         responseObj = result[0];
         word = result[1];
         var bangla = new WordDefinition({
@@ -95,19 +100,18 @@ exports.definition = function(req, res) {
           definition: responseObj.bangla
           
         });
-        return Promise.all([responseObj, word, bangla.save()]);
+        return Promise.all([responseObj, word, bangla.save()]); 
       })
-      .then(function(result) {
-        responseObj = result[0];
+      .then(function(result) { // Return the response
         console.log('Return from crawlers');
+        responseObj = result[0];
         res.json(JSON.stringify(responseObj));
       })
       .catch(function(reason) {
         res.json(null);
       })
-
     }
-   })
+  });
 }
 
 
