@@ -5,4 +5,5 @@ How to setup:
 3. Install nodejs
 4. Install 'npm install express-mvc-generator -g '
 5. Install 'npm install -g nodemon'
-6. start the server with 'nodemon app.js'
+6. execute 'npm install'
+7. start the server with 'nodemon app.js'
