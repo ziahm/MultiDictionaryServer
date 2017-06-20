@@ -3,7 +3,6 @@ var AutoIncrement = require('mongoose-sequence');
 
 var Schema = mongoose.Schema;
 
-
 var wordDefinitionSchema = mongoose.Schema({  
   _id:{ type: Number, default: 1 },
   _word : { type: Number, ref: 'words' },
