@@ -1,7 +1,3 @@
-var numeral = require('numeral');
-var bcrypt = require('bcrypt-nodejs');
-var dateFormat = require('dateformat');
-
 var oxfordCrawler = require('../crawlers/oxford_crawler');
 var longmanCrawler = require('../crawlers/ldoc_crawler');
 var banglaCrawler = require('../crawlers/english_bangla_crawler');
