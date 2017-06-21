@@ -1,66 +1,52 @@
 var request = require('request');
 var cheerio = require('cheerio');
+var pluralize = require('pluralize');
+
 var fs = require('fs');
 
 module.exports = function(req, word) {
-  var pluralize = req.app.get('pluralize');
-  var baseRequestUrl = "http://www.oxfordlearnersdictionaries.com/definition/english/";
-  
+  return getMeaning(word);
+}
 
-  console.log('Searched Word: ' + word);
+async function getMeaning(word) {
+  var parsedResult;
+
+  parsedResult = await requestForMeaning(word);
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
+  parsedResult = await requestForMeaning(word + '1');
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
+  parsedResult = await requestForMeaning(word + '_1');
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
+  var singularWord = pluralize.singular(word);
+  parsedResult = await requestForMeaning(singularWord);
+
+  return parsedResult;
+}
+
+function requestForMeaning(word) {
+  var baseRequestUrl = "http://www.oxfordlearnersdictionaries.com/definition/english/";
   return new Promise(function(resolve, reject) {
     request(baseRequestUrl + word, function(error, response, body) {
       if(error) {
-        //console.log("Error: " + error);
         reject(error);
         return;
       }
-
       console.log("Status code: " + response.statusCode);
-      if(response.statusCode == '404') {
-        request(baseRequestUrl + word+ '1', function(error, response, body) {
-          if(error) {
-            reject(error);
-            return;
-          }
-          console.log("Status code: " + response.statusCode);
-          if(response.statusCode == '404') {
-            request(baseRequestUrl + word+ '_1', function(error, response, body) {
-              if(error) {
-                reject(error);
-                return;
-              }
-              console.log("Status code: " + response.statusCode);
-
-              var singularWord = pluralize.singular(word);
-
-              if(response.statusCode == '404') {
-                request(baseRequestUrl + singularWord, function(error, response, body) {
-                  if(error) {
-                    reject(error);
-                    return;
-                  }
-                  console.log("Status code: " + response.statusCode);
-                  resolve(parseDicReponseBody(body));
-                });
-              }
-              else {
-                resolve(parseDicReponseBody(body));
-              }
-              
-            });
-          }
-          else {
-            resolve(parseDicReponseBody(body));
-          }
-
-        })
-      }
-      else {
+      if(response.statusCode != '404') {
         resolve(parseDicReponseBody(body));
       }
-
-      
+      else {
+        resolve({});
+      }
     });
   });
 }
@@ -123,8 +109,8 @@ function parseDicReponseBody(body) {
     dicWord.definitions = retrieveMeaningAndExample($mainContainer, $);
   }
 
-  console.log('************ OxForm Dictionary *************');
-  console.log(JSON.stringify(dicWord, null, 2));
+  /*console.log('************ OxFord Dictionary *************');
+  console.log(JSON.stringify(dicWord, null, 2));*/
   return dicWord;
   
 }
@@ -226,10 +212,8 @@ function retrieveMeaningAndExample(context, $) {
     }
 
     definitionsExamples.push(definitionExamples)
-
     
   });
 
   return definitionsExamples;
-
 }

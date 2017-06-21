@@ -1,19 +1,36 @@
 var request = require('request');
 var cheerio = require('cheerio');
+var pluralize = require('pluralize');
+
 var fs = require('fs');
 
 module.exports = function(req, word) {
+  return getMeaning(word);
+}
+
+async function getMeaning(word) {
+  var parsedResult;
+
+  parsedResult = await requestForMeaning(word);
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
+  var singularWord = pluralize.singular(word);
+  parsedResult = await requestForMeaning(singularWord);
+
+  return parsedResult;
+}
+
+function requestForMeaning(word) {
+  var baseRequestUrl = "http://www.ldoceonline.com/dictionary/";
   return new Promise(function(resolve, reject) {
-    var pluralize = req.app.get('pluralize');
-    var baseRequestUrl = "http://www.ldoceonline.com/dictionary/";
-    
     request(baseRequestUrl + word, function(error, response, body) {
       if(error) {
-        //console.log("Error: " + error);
         reject(error);
       }
-      console.log("Status code ldoc: " + response.statusCode);
-      //console.log(body);
+
+      console.log("Status code singular ldoc: " + response.statusCode);
 
       var $ = cheerio.load(body);
       var $mainContainer = $('.dictentry').first();
@@ -22,29 +39,12 @@ module.exports = function(req, word) {
         resolve(parseDicReponseBody(body));
       }
       else {
-
-        var singularWord = pluralize.singular(word);
-        request(baseRequestUrl + singularWord, function(error, response, body) {
-          if(error) {
-            reject(error);
-          }
-          console.log("Status code singular ldoc: " + response.statusCode);
-
-          var $ = cheerio.load(body);
-          var $mainContainer = $('.dictentry').first();
-
-          resolve(parseDicReponseBody(body));
-
-        });
-        
+        resolve({})
       }
-     
+
     });
-
   });
-  
 }
-
 
 function parseDicReponseBody(body) {
   var dicWord = {};
@@ -342,8 +342,8 @@ function parseDicReponseBody(body) {
     dicWord.definitions = definitionsExamples;
   }
 
-  console.log('********* LDoc ****************');
-  console.log(JSON.stringify(dicWord, null, 2));
+  /*console.log('********* LDoc ****************');
+  console.log(JSON.stringify(dicWord, null, 2));*/
 
   return dicWord;
 }

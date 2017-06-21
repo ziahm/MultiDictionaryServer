@@ -1,6 +1,5 @@
 var express = require('express');
 var exphbs  = require('express-handlebars');
-var pluralize = require('pluralize')
 
 var app = express();
 var multer = require('multer')
@@ -59,7 +58,7 @@ app.set('view engine', 'handlebars');
 app.set('views', path.join(__dirname, "app/views"));
 
 
-app.set('pluralize', pluralize);
+//app.set('pluralize', pluralize);
 
 app.use(session({
     secret: 'cefalo school',

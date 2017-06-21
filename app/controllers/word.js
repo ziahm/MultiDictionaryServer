@@ -43,10 +43,6 @@ exports.definition = function(req, res) {
         var longmanDicWord = dicWordResults[1];
         var banglaDicWord = dicWordResults[2];
 
-        if(!oxfordDicWord.word || !longmanDicWord.word) {
-          throw 'no matching word';
-        }
-
         /*console.log('********** Oxford Meaning ***************');
         console.log(JSON.stringify(oxfordDicWord, null, 2));
 
@@ -56,55 +52,17 @@ exports.definition = function(req, res) {
         console.log('********** Bangla Meaning ***************');
         console.log(JSON.stringify(banglaDicWord, null, 2));*/
 
-
-        var word = new Word();
-        word.name = search_word;
-
-        responseObj = { word: search_word, oxford: oxfordDicWord, longman: longmanDicWord, bangla: banglaDicWord };
-
+        if(!oxfordDicWord.word || !longmanDicWord.word) {
+          throw 'no matching word';
+        }
         
-        //console.log('Before saving')
-        return Promise.all([responseObj, word.save()]) // save word in database
-        //console.log('AFter saving')
+        responseObj = { word: search_word, oxford: oxfordDicWord, longman: longmanDicWord, bangla: banglaDicWord };
+        
+        return saveWordAndDictionariesDefinitions(responseObj)
 
       })
-      .then(function(result) { // save oxford definition in database
-        responseObj = result[0];
-        word = result[1];
-
-        var oxford = new WordDefinition({
-          _word: word._id,    // assign the _id from the word
-          dictionary_type: "oxford",
-          definition: responseObj.oxford
-          
-        });
-        return Promise.all([responseObj, word, oxford.save()]); 
-      })
-      .then(function(result) { // save longman definition in database
-        responseObj = result[0];
-        word = result[1];
-
-        var longman = new WordDefinition({
-          _word: word._id,    // assign the _id from the word
-          dictionary_type: "longman",
-          definition: responseObj.longman
-        });
-        return Promise.all([responseObj, word, longman.save()]); 
-      })
-      .then(function(result) { // save bangla definition in database
-        responseObj = result[0];
-        word = result[1];
-        var bangla = new WordDefinition({
-          _word: word._id,    // assign the _id from the word
-          dictionary_type: "bangla",
-          definition: responseObj.bangla
-          
-        });
-        return Promise.all([responseObj, word, bangla.save()]); 
-      })
-      .then(function(result) { // Return the response
+      .then(function(responseObj) { // Return the response
         console.log('Return from crawlers');
-        responseObj = result[0];
         res.json(JSON.stringify(responseObj));
       })
       .catch(function(reason) {
@@ -112,6 +70,27 @@ exports.definition = function(req, res) {
       })
     }
   });
+}
+
+async function saveWordAndDictionariesDefinitions(responseObj) {
+  var word = new Word();
+  word.name = responseObj.word;
+  var savedWord = await word.save();
+
+  await saveIndividualDefintion({word: savedWord, dictionary_type: 'oxford', responseObj: responseObj.oxford});
+  await saveIndividualDefintion({word: savedWord, dictionary_type: 'longman', responseObj: responseObj.longman});
+  await saveIndividualDefintion({word: savedWord, dictionary_type: 'bangla', responseObj: responseObj.bangla});
+
+  return responseObj;
+}
+
+function saveIndividualDefintion(options) {
+  var wordDefiniton = new WordDefinition({
+    _word: options.word._id,    // assign the _id from the word
+    dictionary_type: options.dictionary_type,
+    definition: options.responseObj
+  });
+  return wordDefiniton.save();
 }
 
 

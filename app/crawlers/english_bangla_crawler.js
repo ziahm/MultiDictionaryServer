@@ -1,13 +1,30 @@
 var request = require('request');
 var cheerio = require('cheerio');
+var pluralize = require('pluralize');
+
 var fs = require('fs');
 
-
 module.exports = function(req, word) {
-  return new Promise(function(resolve, reject) {
-    var pluralize = req.app.get('pluralize');
-    var baseRequestUrl = "http://www.english-bangla.com/dictionary/";
+  return getMeaning(word);
+}
 
+async function getMeaning(word) {
+  var parsedResult;
+
+  parsedResult = await requestForMeaning(word);
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
+  var singularWord = pluralize.singular(word);
+  parsedResult = await requestForMeaning(singularWord);
+
+  return parsedResult;
+}
+
+function requestForMeaning(word) {
+  var baseRequestUrl = "http://www.english-bangla.com/dictionary/";
+  return new Promise(function(resolve, reject) {
     request(baseRequestUrl + word, function(error, response, body) {
       if(error) {
         reject(error);
@@ -22,18 +39,10 @@ module.exports = function(req, word) {
         resolve(parseDicReponseBody(body));
       }
       else {
-        var singularWord = pluralize.singular(word);
-        request(baseRequestUrl + singularWord, function(error, response, body) {
-          if(error) {
-            reject(error);
-          }
-          console.log("Status code singular bangla: " + response.statusCode);
-          resolve(parseDicReponseBody(body));
-        });
+        resolve({})
       }
-      
-    });
 
+    });
   });
 }
 
@@ -61,8 +70,8 @@ function parseDicReponseBody(body) {
   dicWord.meaningImage = meaningImage;
   dicWord.meaningText = meaningText.trim();
 
-  console.log('*********** English Bangla **************');
-  console.log(JSON.stringify(dicWord, null, 2));
+  /*console.log('*********** English Bangla **************');
+  console.log(JSON.stringify(dicWord, null, 2));*/
   return dicWord;
 }
 
