@@ -16,6 +16,11 @@ async function getMeaning(word) {
     return parsedResult;
   }
 
+  parsedResult = await requestForMeaning(word + '_2');
+  if(parsedResult.word) {
+    return parsedResult;
+  }
+
   var singularWord = pluralize.singular(word);
   parsedResult = await requestForMeaning(singularWord);
 
