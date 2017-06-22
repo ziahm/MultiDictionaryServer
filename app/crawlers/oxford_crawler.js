@@ -68,9 +68,9 @@ function parseDicReponseBody(body) {
   var word = $('h2.h', $mainContainer).first().text();
   var partsOfSpeech = $mainContainer.find('.pos').first().text();
   var phoneticSymbolBr = $(".pron-g[geo='br']", $mainContainer)
-                          .first().find('.phon').first().clone().children().remove().end().text();
+                          .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
   var phoneticSymbolNam = $(".pron-g[geo='n_am']", $mainContainer)
-                          .first().find('.phon').first().clone().children().remove().end().text();
+                          .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
 
   var soundBr = $(".pron-g[geo='br']", $mainContainer)
                           .first().find('.sound').first().attr('data-src-mp3')
