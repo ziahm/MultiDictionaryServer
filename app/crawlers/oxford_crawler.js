@@ -9,27 +9,30 @@ module.exports = function(req, word) {
 }
 
 async function getMeaning(word) {
-  var parsedResult;
+  var parsedResult = {};
 
-  parsedResult = await requestForMeaning(word);
-  if(parsedResult.word) {
-    return parsedResult;
+  var gWordPromise = generateWordVariations(word);
+
+  for(var wordPromise of gWordPromise) {
+    parsedResult = await wordPromise;
+    if(parsedResult.word) {
+      return parsedResult;
+    }
   }
-
-  parsedResult = await requestForMeaning(word + '1');
-  if(parsedResult.word) {
-    return parsedResult;
-  }
-
-  parsedResult = await requestForMeaning(word + '_1');
-  if(parsedResult.word) {
-    return parsedResult;
-  }
-
-  var singularWord = pluralize.singular(word);
-  parsedResult = await requestForMeaning(singularWord);
-
   return parsedResult;
+}
+
+function* generateWordVariations(word) {
+  var singularWord = pluralize.singular(word);
+  var variations = [
+                      word, 
+                      word + '1', 
+                      word + '_1', singularWord
+                  ];
+
+  for(var w = 0; w < variations.length; w++) {
+    yield requestForMeaning(variations[w]);
+  }
 }
 
 function requestForMeaning(word) {
