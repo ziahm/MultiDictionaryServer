@@ -29,6 +29,7 @@ module.exports = function(crawlerInstance) {
       request(crawlerInstance.baseRequestUrl + word, function(error, response, body) {
         if(error) {
           reject(error);
+          return;
         }
 
         console.log('Word version: ' + word);
