@@ -1,114 +1,183 @@
-var request = require('request');
 var cheerio = require('cheerio');
 var pluralize = require('pluralize');
 
-var fs = require('fs');
+var crawlerBase = require('./crawler_base');
 
-module.exports = function(req, word) {
+module.exports = exports = function(req, word) {
+  var getMeaning = crawlerBase(getCrawlerInstance.call({})) // Inject cralwer specific implmeneted methods
   return getMeaning(word);
 }
 
-async function getMeaning(word) {
-  var parsedResult;
+function getCrawlerInstance() {
+  this.type = 'Longman Dictionary';
+  this.baseRequestUrl = "http://www.ldoceonline.com/dictionary/";
 
-  parsedResult = await requestForMeaning(word);
-  if(parsedResult.word) {
-    return parsedResult;
+  // To return array of all the words variations
+  this.wordVariations = function(word) {
+    var singularWord = pluralize.singular(word);
+    var variations = [
+                        word, 
+                        word + '_2', 
+                        singularWord
+                    ];
+    return variations;
   }
 
-  parsedResult = await requestForMeaning(word + '_2');
-  if(parsedResult.word) {
-    return parsedResult;
+  // To check whether word meaning found or not
+  this.isWordFound = function(response, body) {
+    var $ = cheerio.load(body);
+    var $mainContainer = $('.dictentry').first();
+    return $mainContainer.length > 0;
   }
 
-  var singularWord = pluralize.singular(word);
-  parsedResult = await requestForMeaning(singularWord);
+  // Parse the response body to generate word object
+  this.parseDicReponseBody = function(body) {
+    var dicWord = {};
+    
+    var $ = cheerio.load(body);
+    var $mainContainer = $('.dictentry').first();
 
-  return parsedResult;
-}
+    var has_meaning_group = false;
+    var $meaning_sections = $('.SIGNPOST', $mainContainer);
 
-function requestForMeaning(word) {
-  var baseRequestUrl = "http://www.ldoceonline.com/dictionary/";
-  return new Promise(function(resolve, reject) {
-    request(baseRequestUrl + word, function(error, response, body) {
-      if(error) {
-        reject(error);
-      }
+    if($meaning_sections.length > 0) {
+      has_meaning_group = true;
+    }
 
-      console.log("Status code singular ldoc: " + response.statusCode);
+    var $wppRow = $(".Head", $mainContainer);
+    var word = $('.HYPHENATION', $wppRow).first().text();
+    var partsOfSpeech =  $('.POS', $wppRow).first().text();
+    var phoneticSymbolBr = $(".PronCodes", $wppRow).first().find('.PRON').first().text();
 
-      var $ = cheerio.load(body);
-      var $mainContainer = $('.dictentry').first();
+    var soundBr = $(".speaker.brefile", $wppRow).first().attr('data-src-mp3')
+    var soundNam = $(".speaker.amefile", $wppRow).first().attr('data-src-mp3')
 
-      if($mainContainer.length > 0) {
-        resolve(parseDicReponseBody(body));
-      }
-      else {
-        resolve({})
-      }
+    dicWord.word = word;
+    dicWord.pos = partsOfSpeech;
+    dicWord.phonetic_british = phoneticSymbolBr;
+    dicWord.phonetic_american = null;
+    dicWord.pronunciation_sound_british = soundBr;
+    dicWord.pronunciation_sound_american = soundNam;
 
-    });
-  });
-}
+    //console.log('Word: ' + word);
+    //console.log('Part Of Speech: ' + partsOfSpeech);
+    //console.log('Phonetic Symbole British: ' + phoneticSymbolBr);
+    //console.log('Phonetic Symbole American: ' + phoneticSymbolNam);
+    //console.log('Sound British: ' + soundBr);
+    //console.log('Sound American: ' + soundNam);
 
-function parseDicReponseBody(body) {
-  var dicWord = {};
-  
-  var $ = cheerio.load(body);
-  var $mainContainer = $('.dictentry').first();
+    if(has_meaning_group) {
+      var definition_groups = [];
 
-  var has_meaning_group = false;
-  var $meaning_sections = $('.SIGNPOST', $mainContainer);
+      $meaning_sections.each(function() {
+        var $group = $(this);
+        var group_name = $(this).text();
+        //console.log('Group Name: ' + group_name);
+        //console.log('============');
+        var $groupWrapper = $(this).closest('.Sense');
 
-  if($meaning_sections.length > 0) {
-    has_meaning_group = true;
-  }
+        var definitionsExamples = [];
 
-  var $wppRow = $(".Head", $mainContainer);
-  var word = $('.HYPHENATION', $wppRow).first().text();
-  var partsOfSpeech =  $('.POS', $wppRow).first().text();
-  var phoneticSymbolBr = $(".PronCodes", $wppRow).first().find('.PRON').first().text();
+        // Has multiple meaning under each group
+        if($('.Subsense', $groupWrapper).length > 0) {
+          
 
-  var soundBr = $(".speaker.brefile", $wppRow).first().attr('data-src-mp3')
-  var soundNam = $(".speaker.amefile", $wppRow).first().attr('data-src-mp3')
+          $('.Subsense', $groupWrapper).each(function() {
 
-  dicWord.word = word;
-  dicWord.pos = partsOfSpeech;
-  dicWord.phonetic_british = phoneticSymbolBr;
-  dicWord.phonetic_american = null;
-  dicWord.pronunciation_sound_british = soundBr;
-  dicWord.pronunciation_sound_american = soundNam;
+            var definitionExamples = {};
 
-  //console.log('Word: ' + word);
-  //console.log('Part Of Speech: ' + partsOfSpeech);
-  //console.log('Phonetic Symbole British: ' + phoneticSymbolBr);
-  //console.log('Phonetic Symbole American: ' + phoneticSymbolNam);
-  //console.log('Sound British: ' + soundBr);
-  //console.log('Sound American: ' + soundNam);
+            var label = $('.REGISTERLAB', $(this)).first().text();
+            var grammer = $('.GRAM', $(this)).first().text();
+            var definition = $('.DEF', $(this)).first().text().trim();
+            
 
-  if(has_meaning_group) {
-    var definition_groups = [];
+            //console.log('Grammer ' + grammer);
+            //console.log('Definition: ' + definition);
 
-    $meaning_sections.each(function() {
-      var $group = $(this);
-      var group_name = $(this).text();
-      //console.log('Group Name: ' + group_name);
-      //console.log('============');
-      var $groupWrapper = $(this).closest('.Sense');
+            var without_usage_group_examples = [];
 
-      var definitionsExamples = [];
+            $('.EXAMPLE:not(.GramExa .EXAMPLE):not(.ColloExa .EXAMPLE):not(.GramBox .EXAMPLE)', $(this)).each(function() {
+              var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
+              var word_example = $(this).clone().children().remove('.speaker').end().text();
 
-      // Has multiple meaning under each group
-      if($('.Subsense', $groupWrapper).length > 0) {
-        
+              without_usage_group_examples.push(word_example);
 
-        $('.Subsense', $groupWrapper).each(function() {
+              //console.log('Example Sound ' + example_sound);
+              //console.log('Example Sentence ' + word_example);
+            });
 
-          var definitionExamples = {};
 
-          var label = $('.REGISTERLAB', $(this)).first().text();
-          var grammer = $('.GRAM', $(this)).first().text();
-          var definition = $('.DEF', $(this)).first().text().trim();
+
+            var example_usage_format_groups = [];
+            if($('.GramExa', $(this)).length > 0) {
+              //examples Groups
+              $('.GramExa', $(this)).each(function() {
+                var word_usage_format_group_name = $('.PROPFORMPREP', $(this)).first().text();
+
+                //console.log('Word Usage Format Group ' + word_usage_format_group_name);
+
+                //examples
+                var examples = [];
+                $('.EXAMPLE', $(this)).each(function() {
+                  var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
+                  var word_example = $(this).clone().children().remove('.speaker').end().text();
+
+                  examples.push(word_example);
+
+                  //console.log('Example Sound ' + example_sound);
+                  //console.log('Example Sentence ' + word_example);
+                });
+
+                example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
+              });
+            }
+
+
+            //examples Groups
+          if($('.ColloExa', $(this)).length > 0) {
+            $('.ColloExa', $groupWrapper).each(function() {
+              var word_usage_format_group_name = $('.COLLO', $(this)).first().text();
+              //console.log('Word Usage Format Group ' + word_usage_format_group_name);
+
+              //examples
+              var examples = [];
+              $('.EXAMPLE', $(this)).each(function() {
+                var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
+                var word_example = $(this).clone().children().remove('.speaker').end().text();
+
+                examples.push(word_example);
+
+                //console.log('Example Sound ' + example_sound);
+                //console.log('Example Sentence ' + word_example);
+              });
+
+              example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
+
+            });
+          }
+
+            definitionExamples.grammer = grammer;
+            definitionExamples.label = label;
+            //definitionExamples.use = use;
+            definitionExamples.definition = definition;
+
+            if(example_usage_format_groups.length > 0) {
+              definitionExamples.example_usage_format_groups = example_usage_format_groups ;
+            }
+
+            if(without_usage_group_examples.length > 0) {
+              definitionExamples.definition_examples = without_usage_group_examples;
+            }
+
+            definitionsExamples.push(definitionExamples);
+            
+
+          });
+        }
+        else { // Has Only one meaning under each group
+          var label = $('.REGISTERLAB', $groupWrapper).first().text();
+          var grammer = $('.GRAM', $groupWrapper).first().text();
+          var definition = $('.DEF', $groupWrapper).first().text().trim();
           
 
           //console.log('Grammer ' + grammer);
@@ -116,26 +185,22 @@ function parseDicReponseBody(body) {
 
           var without_usage_group_examples = [];
 
-          $('.EXAMPLE:not(.GramExa .EXAMPLE):not(.ColloExa .EXAMPLE):not(.GramBox .EXAMPLE)', $(this)).each(function() {
+          $('.EXAMPLE:not(.GramExa .EXAMPLE):not(.ColloExa .EXAMPLE):not(.GramBox .EXAMPLE)', $groupWrapper).each(function() {
             var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
             var word_example = $(this).clone().children().remove('.speaker').end().text();
 
-            without_usage_group_examples.push(word_example);
+             without_usage_group_examples.push(word_example);
 
             //console.log('Example Sound ' + example_sound);
             //console.log('Example Sentence ' + word_example);
-          });
+          })
 
-
-
+          //examples Groups
           var example_usage_format_groups = [];
-          if($('.GramExa', $(this)).length > 0) {
-            //examples Groups
-            $('.GramExa', $(this)).each(function() {
-              var word_usage_format_group_name = $('.PROPFORMPREP', $(this)).first().text();
-
+          if($('.GramExa', $groupWrapper).length > 0) {
+            $('.GramExa', $groupWrapper).each(function() {
+              var word_usage_format_group_name = $('.PROPFORM', $(this)).first().text();
               //console.log('Word Usage Format Group ' + word_usage_format_group_name);
-
               //examples
               var examples = [];
               $('.EXAMPLE', $(this)).each(function() {
@@ -152,29 +217,30 @@ function parseDicReponseBody(body) {
             });
           }
 
-
           //examples Groups
-        if($('.ColloExa', $(this)).length > 0) {
-          $('.ColloExa', $groupWrapper).each(function() {
-            var word_usage_format_group_name = $('.COLLO', $(this)).first().text();
-            //console.log('Word Usage Format Group ' + word_usage_format_group_name);
+          if($('.ColloExa', $groupWrapper).length > 0) {
+            $('.ColloExa', $groupWrapper).each(function() {
+              var word_usage_format_group_name = $('.COLLO', $(this)).first().text();
+              //console.log('Word Usage Format Group ' + word_usage_format_group_name);
 
-            //examples
-            var examples = [];
-            $('.EXAMPLE', $(this)).each(function() {
-              var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
-              var word_example = $(this).clone().children().remove('.speaker').end().text();
+              //examples
+              var examples = [];
+              $('.EXAMPLE', $(this)).each(function() {
+                var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
+                var word_example = $(this).clone().children().remove('.speaker').end().text();
 
-              examples.push(word_example);
+                examples.push(word_example);
 
-              //console.log('Example Sound ' + example_sound);
-              //console.log('Example Sentence ' + word_example);
+                //console.log('Example Sound ' + example_sound);
+                //console.log('Example Sentence ' + word_example);
+              });
+
+              example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
+
             });
+          }
 
-            example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
-
-          });
-        }
+          var definitionExamples = {};
 
           definitionExamples.grammer = grammer;
           definitionExamples.label = label;
@@ -190,39 +256,42 @@ function parseDicReponseBody(body) {
           }
 
           definitionsExamples.push(definitionExamples);
-          
+        }
+        definition_groups.push({group_name: group_name, definitions: definitionsExamples});
+      });
 
-        });
-      }
-      else { // Has Only one meaning under each group
-        var label = $('.REGISTERLAB', $groupWrapper).first().text();
-        var grammer = $('.GRAM', $groupWrapper).first().text();
-        var definition = $('.DEF', $groupWrapper).first().text().trim();
-        
-
+      dicWord.definition_groups = definition_groups;
+    }
+    else {
+      var definitionsExamples = [];
+      $('.Sense', $mainContainer).each(function() {
+        var label = $('.REGISTERLAB', $(this)).first().text();
+        var grammer = $('.GRAM', $(this)).first().text();
+        var definition = $('.DEF', $(this)).first().text().trim();
+        //console.log('Label ' + label);
         //console.log('Grammer ' + grammer);
-        //console.log('Definition: ' + definition);
+        //console.log('Definition ' + definition);
 
         var without_usage_group_examples = [];
 
-        $('.EXAMPLE:not(.GramExa .EXAMPLE):not(.ColloExa .EXAMPLE):not(.GramBox .EXAMPLE)', $groupWrapper).each(function() {
+        $('.EXAMPLE:not(.GramExa .EXAMPLE)', $(this)).each(function() {
           var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
           var word_example = $(this).clone().children().remove('.speaker').end().text();
 
-           without_usage_group_examples.push(word_example);
+          without_usage_group_examples.push(word_example);
 
           //console.log('Example Sound ' + example_sound);
           //console.log('Example Sentence ' + word_example);
         })
 
-        //examples Groups
         var example_usage_format_groups = [];
-        if($('.GramExa', $groupWrapper).length > 0) {
-          $('.GramExa', $groupWrapper).each(function() {
+        if($('.GramExa', $(this)).length > 0) {
+          //examples Groups
+          $('.GramExa', $(this)).each(function() {
             var word_usage_format_group_name = $('.PROPFORM', $(this)).first().text();
             //console.log('Word Usage Format Group ' + word_usage_format_group_name);
             //examples
-            var examples = [];
+             var examples = [];
             $('.EXAMPLE', $(this)).each(function() {
               var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
               var word_example = $(this).clone().children().remove('.speaker').end().text();
@@ -232,36 +301,12 @@ function parseDicReponseBody(body) {
               //console.log('Example Sound ' + example_sound);
               //console.log('Example Sentence ' + word_example);
             });
-
             example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
           });
         }
 
-        //examples Groups
-        if($('.ColloExa', $groupWrapper).length > 0) {
-          $('.ColloExa', $groupWrapper).each(function() {
-            var word_usage_format_group_name = $('.COLLO', $(this)).first().text();
-            //console.log('Word Usage Format Group ' + word_usage_format_group_name);
 
-            //examples
-            var examples = [];
-            $('.EXAMPLE', $(this)).each(function() {
-              var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
-              var word_example = $(this).clone().children().remove('.speaker').end().text();
-
-              examples.push(word_example);
-
-              //console.log('Example Sound ' + example_sound);
-              //console.log('Example Sentence ' + word_example);
-            });
-
-            example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
-
-          });
-        }
-
-        var definitionExamples = {};
-
+        var definitionExamples= {};
         definitionExamples.grammer = grammer;
         definitionExamples.label = label;
         //definitionExamples.use = use;
@@ -276,79 +321,18 @@ function parseDicReponseBody(body) {
         }
 
         definitionsExamples.push(definitionExamples);
-      }
-      definition_groups.push({group_name: group_name, definitions: definitionsExamples});
-    });
 
-    dicWord.definition_groups = definition_groups;
-  }
-  else {
-    var definitionsExamples = [];
-    $('.Sense', $mainContainer).each(function() {
-      var label = $('.REGISTERLAB', $(this)).first().text();
-      var grammer = $('.GRAM', $(this)).first().text();
-      var definition = $('.DEF', $(this)).first().text().trim();
-      //console.log('Label ' + label);
-      //console.log('Grammer ' + grammer);
-      //console.log('Definition ' + definition);
-
-      var without_usage_group_examples = [];
-
-      $('.EXAMPLE:not(.GramExa .EXAMPLE)', $(this)).each(function() {
-        var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
-        var word_example = $(this).clone().children().remove('.speaker').end().text();
-
-        without_usage_group_examples.push(word_example);
-
-        //console.log('Example Sound ' + example_sound);
-        //console.log('Example Sentence ' + word_example);
       })
 
-      var example_usage_format_groups = [];
-      if($('.GramExa', $(this)).length > 0) {
-        //examples Groups
-        $('.GramExa', $(this)).each(function() {
-          var word_usage_format_group_name = $('.PROPFORM', $(this)).first().text();
-          //console.log('Word Usage Format Group ' + word_usage_format_group_name);
-          //examples
-           var examples = [];
-          $('.EXAMPLE', $(this)).each(function() {
-            var example_sound = $(this).find('.speaker').first().attr('data-src-mp3');
-            var word_example = $(this).clone().children().remove('.speaker').end().text();
+      dicWord.definitions = definitionsExamples;
+    }
 
-            examples.push(word_example);
+    /*console.log('********* LDoc ****************');
+    console.log(JSON.stringify(dicWord, null, 2));*/
 
-            //console.log('Example Sound ' + example_sound);
-            //console.log('Example Sentence ' + word_example);
-          });
-          example_usage_format_groups.push({format_group_name: word_usage_format_group_name, format_group_examples: examples})
-        });
-      }
-
-
-      var definitionExamples= {};
-      definitionExamples.grammer = grammer;
-      definitionExamples.label = label;
-      //definitionExamples.use = use;
-      definitionExamples.definition = definition;
-
-      if(example_usage_format_groups.length > 0) {
-        definitionExamples.example_usage_format_groups = example_usage_format_groups ;
-      }
-
-      if(without_usage_group_examples.length > 0) {
-        definitionExamples.definition_examples = without_usage_group_examples;
-      }
-
-      definitionsExamples.push(definitionExamples);
-
-    })
-
-    dicWord.definitions = definitionsExamples;
+    return dicWord;
   }
 
-  /*console.log('********* LDoc ****************');
-  console.log(JSON.stringify(dicWord, null, 2));*/
-
-  return dicWord;
+  return this;
 }
+

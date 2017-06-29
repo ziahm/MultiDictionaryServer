@@ -1,121 +1,99 @@
-var request = require('request');
 var cheerio = require('cheerio');
 var pluralize = require('pluralize');
 
-var fs = require('fs');
+var crawlerBase = require('./crawler_base');
 
-module.exports = function(req, word) {
+module.exports = exports = function(req, word) {
+  var getMeaning = crawlerBase(getCrawlerInstance.call({})) // Inject cralwer specific implmeneted methods
   return getMeaning(word);
 }
 
-async function getMeaning(word) {
-  var parsedResult = {};
+function getCrawlerInstance() {
+  this.type = 'Oxford Dictionary';
+  this.baseRequestUrl = "http://www.oxfordlearnersdictionaries.com/definition/english/";
 
-  var gWordPromise = generateWordVariations(word);
+  // To return array of all the words variations
+  this.wordVariations = function(word) {
+    var singularWord = pluralize.singular(word);
+    var variations = [
+                        word, 
+                        word + '1', 
+                        word + '_1', 
+                        singularWord
+                    ];
+    return variations;
+  }
 
-  for(var wordPromise of gWordPromise) {
-    parsedResult = await wordPromise;
-    if(parsedResult.word) {
-      return parsedResult;
+  // To check whether word meaning found or not
+  this.isWordFound = function(response, body) {
+    return response.statusCode != '404';
+  }
+
+  // Parse the response body to generate word object
+  this.parseDicReponseBody = function(body) {
+    var dicWord = {};
+
+    var $ = cheerio.load(body);
+    var $mainContainer = $('#main-container');
+
+    var has_meaning_group = false;
+    var $meaning_sections = $('.sn-gs:not(.idm-gs .sn-gs)', $mainContainer);
+
+    if($meaning_sections.length > 1) {
+      has_meaning_group = true;
     }
-  }
-  return parsedResult;
-}
 
-function* generateWordVariations(word) {
-  var singularWord = pluralize.singular(word);
-  var variations = [
-                      word, 
-                      word + '1', 
-                      word + '_1', singularWord
-                  ];
+    var word = $('h2.h', $mainContainer).first().text();
+    var partsOfSpeech = $mainContainer.find('.pos').first().text();
+    var phoneticSymbolBr = $(".pron-g[geo='br']", $mainContainer)
+                            .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
+    var phoneticSymbolNam = $(".pron-g[geo='n_am']", $mainContainer)
+                            .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
 
-  for(var w = 0; w < variations.length; w++) {
-    yield requestForMeaning(variations[w]);
-  }
-}
-
-function requestForMeaning(word) {
-  var baseRequestUrl = "http://www.oxfordlearnersdictionaries.com/definition/english/";
-  return new Promise(function(resolve, reject) {
-    request(baseRequestUrl + word, function(error, response, body) {
-      if(error) {
-        reject(error);
-        return;
-      }
-      console.log("Status code: " + response.statusCode);
-      if(response.statusCode != '404') {
-        resolve(parseDicReponseBody(body));
-      }
-      else {
-        resolve({});
-      }
-    });
-  });
-}
-
-
-function parseDicReponseBody(body) {
-  var dicWord = {};
-
-  var $ = cheerio.load(body);
-  var $mainContainer = $('#main-container');
-
-  var has_meaning_group = false;
-  var $meaning_sections = $('.sn-gs:not(.idm-gs .sn-gs)', $mainContainer);
-
-  if($meaning_sections.length > 1) {
-    has_meaning_group = true;
-  }
-
-  var word = $('h2.h', $mainContainer).first().text();
-  var partsOfSpeech = $mainContainer.find('.pos').first().text();
-  var phoneticSymbolBr = $(".pron-g[geo='br']", $mainContainer)
-                          .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
-  var phoneticSymbolNam = $(".pron-g[geo='n_am']", $mainContainer)
-                          .first().find('.phon').first().clone().children(':not(.ptl)').remove().end().text();
-
-  var soundBr = $(".pron-g[geo='br']", $mainContainer)
-                          .first().find('.sound').first().attr('data-src-mp3')
-  var soundNam = $(".pron-g[geo='n_am']", $mainContainer)
-                          .first().find('.sound').first().attr('data-src-mp3')
+    var soundBr = $(".pron-g[geo='br']", $mainContainer)
+                            .first().find('.sound').first().attr('data-src-mp3')
+    var soundNam = $(".pron-g[geo='n_am']", $mainContainer)
+                            .first().find('.sound').first().attr('data-src-mp3')
 
 
 
-  dicWord.word = word;
-  dicWord.pos = partsOfSpeech;
-  dicWord.phonetic_british = phoneticSymbolBr;
-  dicWord.phonetic_american = phoneticSymbolNam;
-  dicWord.pronunciation_sound_british = soundBr;
-  dicWord.pronunciation_sound_american = soundNam;
+    dicWord.word = word;
+    dicWord.pos = partsOfSpeech;
+    dicWord.phonetic_british = phoneticSymbolBr;
+    dicWord.phonetic_american = phoneticSymbolNam;
+    dicWord.pronunciation_sound_british = soundBr;
+    dicWord.pronunciation_sound_american = soundNam;
 
-  //console.log('Word: ' + word);
-  //console.log('Part Of Speech: ' + partsOfSpeech);
-  //console.log('Phonetic Symbole British: ' + phoneticSymbolBr);
-  //console.log('Phonetic Symbole American: ' + phoneticSymbolNam);
-  //console.log('Sound British: ' + soundBr);
-  //console.log('Sound American: ' + soundNam);
+    //console.log('Word: ' + word);
+    //console.log('Part Of Speech: ' + partsOfSpeech);
+    //console.log('Phonetic Symbole British: ' + phoneticSymbolBr);
+    //console.log('Phonetic Symbole American: ' + phoneticSymbolNam);
+    //console.log('Sound British: ' + soundBr);
+    //console.log('Sound American: ' + soundNam);
 
-  var definition_groups = [];
+    var definition_groups = [];
 
-  if(has_meaning_group) {
-    $meaning_sections.each(function() {
-      $group = $(this);
-      var group_name = $(this).find('.shcut').first().text();
-      //console.log('Group Name: ' + group_name);
-      //console.log('============');
-      definition_groups.push({group_name: group_name, definitions: retrieveMeaningAndExample($group, $)})
-    })
-    dicWord.definition_groups = definition_groups;
-  }
-  else {
-    dicWord.definitions = retrieveMeaningAndExample($mainContainer, $);
+    if(has_meaning_group) {
+      $meaning_sections.each(function() {
+        $group = $(this);
+        var group_name = $(this).find('.shcut').first().text();
+        //console.log('Group Name: ' + group_name);
+        //console.log('============');
+        definition_groups.push({group_name: group_name, definitions: retrieveMeaningAndExample($group, $)})
+      })
+      dicWord.definition_groups = definition_groups;
+    }
+    else {
+      dicWord.definitions = retrieveMeaningAndExample($mainContainer, $);
+    }
+
+    /*console.log('************ OxFord Dictionary *************');
+    console.log(JSON.stringify(dicWord, null, 2));*/
+    return dicWord;
+    
   }
 
-  /*console.log('************ OxFord Dictionary *************');
-  console.log(JSON.stringify(dicWord, null, 2));*/
-  return dicWord;
-  
+  return this;
 }
 
 function retrieveMeaningAndExample(context, $) {
@@ -220,3 +198,4 @@ function retrieveMeaningAndExample(context, $) {
 
   return definitionsExamples;
 }
+
